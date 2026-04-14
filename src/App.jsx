@@ -18,8 +18,11 @@ export default function App() {
   const [station, setStation] = useState(() => localStorage.getItem('station') || '');
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab') || 'inicio');
   const [activeModule, setActiveModule] = useState(() => localStorage.getItem('activeModule') || null);
+  const [isLocked, setIsLocked] = useState(() => localStorage.getItem('isLocked') === 'true');
+  const [isAdminConfiguring, setIsAdminConfiguring] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstallable, setIsInstallable] = useState(false);
+  const [pressTimer, setPressTimer] = useState(null);
 
   useEffect(() => {
     if (loggedUser) localStorage.setItem('loggedUser', JSON.stringify(loggedUser));
@@ -34,6 +37,10 @@ export default function App() {
     if (activeModule) localStorage.setItem('activeModule', activeModule);
     else localStorage.removeItem('activeModule');
   }, [activeModule]);
+
+  useEffect(() => {
+    localStorage.setItem('isLocked', isLocked);
+  }, [isLocked]);
 
   const STATIONS_CSV_URL = 'https://docs.google.com/spreadsheets/d/1EB5qfFa9Hr-lQuUPxegl7PmQG30Ti5friDjkQIXjfzk/gviz/tq?tqx=out:csv&sheet=Estaciones';
 
@@ -201,8 +208,23 @@ export default function App() {
       }
 
       if (user.code === code) {
+        // Check for Admin Role in Setup/Unlock mode
+        if ((!isLocked || isAdminConfiguring) && user.rol?.toLowerCase() !== 'admin') {
+          setError('Solo los administradores pueden configurar la terminal.');
+          return;
+        }
+
+        if (isAdminConfiguring || !isLocked) {
+          // Admin successfully logged in to configure
+          setIsAdminConfiguring(false);
+          setStation(''); // Reset station to let them pick a new one
+          setIsLocked(false);
+          setLoggedUser(null);
+          return;
+        }
+
         setLoggedUser(user);
-        setSuccess(''); // Clear success so we don't show the login success text over the dashboard if it goes back
+        setSuccess(''); 
 
         if (user.modules && user.modules.length === 1) {
           setActiveModule(user.modules[0]);
@@ -240,6 +262,20 @@ export default function App() {
       setIsInstallable(false);
     }
     setDeferredPrompt(null);
+  };
+
+  const handleLongPressStart = () => {
+    const timer = setTimeout(() => {
+      if (confirm('¿desea entrar al modo de configuración de terminal?')) {
+        setIsAdminConfiguring(true);
+        setLoggedUser(null);
+      }
+    }, 3000);
+    setPressTimer(timer);
+  };
+
+  const handleLongPressEnd = () => {
+    if (pressTimer) clearTimeout(pressTimer);
   };
 
   const handleResendCode = async () => {
@@ -436,7 +472,14 @@ export default function App() {
       <div className="dashboard-container">
         <header className="dashboard-header" style={{ padding: '1rem 2rem' }}>
 
-          <div className="logo-container" style={{ margin: 0, height: '40px', flex: '0 0 auto' }}>
+          <div 
+            className="logo-container" 
+            style={{ margin: 0, height: '40px', flex: '0 0 auto', cursor: 'pointer' }}
+            onMouseDown={handleLongPressStart}
+            onMouseUp={handleLongPressEnd}
+            onTouchStart={handleLongPressStart}
+            onTouchEnd={handleLongPressEnd}
+          >
             <img src="/logo.png" alt="M&S Logo" style={{ height: '100%' }} onError={(e) => { e.target.style.display = 'none'; }} />
           </div>
 
@@ -543,20 +586,76 @@ export default function App() {
     <div className="app-container">
       <div className="auth-card" style={{ maxWidth: !station ? '680px' : '480px', transition: 'max-width 0.3s ease' }}>
         <div className="auth-header">
-          <div className="logo-container">
+          <div 
+            className="logo-container"
+            onMouseDown={handleLongPressStart}
+            onMouseUp={handleLongPressEnd}
+            onTouchStart={handleLongPressStart}
+            onTouchEnd={handleLongPressEnd}
+            style={{ cursor: 'pointer' }}
+          >
             {/* Logo provided by user, reading from placeholder path */}
             <img src="/logo.png" alt="Martinez Staneck Logo" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block' }} />
             <h1 style={{ color: 'var(--primary)', fontSize: '2.2rem', display: 'none' }}>M&S</h1>
           </div>
-          <h1>Portal de operarios</h1>
+          <h1>{isAdminConfiguring || !isLocked ? 'Configuración de terminal' : 'Portal de operarios'}</h1>
         </div>
 
         {success && !error ? (
           <div className="success-message">
             {success}
           </div>
+        ) : (!station || isAdminConfiguring) && (isAdminConfiguring || !isLocked) ? (
+          <div className="admin-login-step">
+            {!isAdminConfiguring && !isLocked && (
+              <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', color: '#92400e', fontSize: '0.9rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                <AlertCircle size={20} />
+                Esta terminal no está configurada aún.
+              </div>
+            )}
+            
+            <form onSubmit={handleLogin} className="form-group" style={{ gap: '1.25rem' }}>
+              <div className="form-group">
+                <label>Administrador</label>
+                <select 
+                  className="custom-select" 
+                  value={selectedName} 
+                  onChange={(e) => { setSelectedName(e.target.value); setError(''); }}
+                >
+                  <option value="" disabled>Seleccionar admin...</option>
+                  {users.filter(u => u.rol?.toLowerCase() === 'admin').map(u => (
+                    <option key={u.id} value={u.name}>{u.name}</option>
+                  ))}
+                  {users.filter(u => u.rol?.toLowerCase() === 'admin').length === 0 && (
+                    <option disabled>No hay administradores en el excel</option>
+                  )}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Código Admin</label>
+                <div className="input-wrapper">
+                  <input
+                    type={showCode ? "text" : "password"}
+                    inputMode="numeric"
+                    className="custom-input"
+                    placeholder="PIN de administrador"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {error && <div className="error-message"><AlertCircle size={16} />{error}</div>}
+
+              <button type="submit" className="btn btn-primary" disabled={loading}>
+                {loading ? <div className="spinner"></div> : 'Ingresar como admin'}
+              </button>
+            </form>
+          </div>
         ) : !station ? (
           <div className="stations-step" style={{ animation: 'fadeIn 0.3s ease-out', display: 'flex', flexDirection: 'column' }}>
+            <h3 style={{ textTransform: 'lowercase', marginBottom: '1.5rem', color: 'var(--text-secondary)', textAlign: 'center' }}>Selecciona la estación base para esta tablet</h3>
             {allStations.length === 0 ? (
               <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>Cargando estaciones...</div>
             ) : (
@@ -572,6 +671,7 @@ export default function App() {
                     className="station-card"
                     onClick={() => {
                       setStation(st);
+                      setIsLocked(true);
                       setSelectedName('');
                       setError('');
                     }}
@@ -606,15 +706,18 @@ export default function App() {
                 <MapPin size={18} />
                 {station}
               </div>
-              <button
-                type="button"
-                onClick={() => { setStation(''); setSelectedName(''); setError(''); }}
-                style={{
-                  background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', fontSize: '0.875rem'
-                }}
-              >
-                <ChevronLeft size={16} /> Volver
-              </button>
+              {/* Volver button removed for workers if locked */}
+              {!isLocked && (
+                <button
+                  type="button"
+                  onClick={() => { setStation(''); setSelectedName(''); setError(''); }}
+                  style={{
+                    background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', fontSize: '0.875rem'
+                  }}
+                >
+                  <ChevronLeft size={16} /> Volver
+                </button>
+              )}
             </div>
 
             <div className="form-group">
