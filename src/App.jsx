@@ -20,6 +20,7 @@ export default function App() {
   const [activeModule, setActiveModule] = useState(() => localStorage.getItem('activeModule') || null);
   const [isLocked, setIsLocked] = useState(() => localStorage.getItem('isLocked') === 'true');
   const [isAdminConfiguring, setIsAdminConfiguring] = useState(false);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstallable, setIsInstallable] = useState(false);
   const [pressTimer, setPressTimer] = useState(null);
@@ -207,19 +208,22 @@ export default function App() {
         return;
       }
 
-      if (user.code === code) {
+      if (user.code?.toString().trim() === code.trim()) {
         // Check for Admin Role in Setup/Unlock mode
-        if ((!isLocked || isAdminConfiguring) && user.rol?.toLowerCase() !== 'admin') {
-          setError('Solo los administradores pueden configurar la terminal.');
+        const isUserAdmin = user.rol?.trim().toLowerCase() === 'admin';
+        
+        if ((!isLocked || isAdminConfiguring) && !isUserAdmin) {
+          setError('Este usuario no tiene permisos de administrador (Rol: ' + (user.rol || 'ninguno') + ').');
           return;
         }
 
         if (isAdminConfiguring || !isLocked) {
           // Admin successfully logged in to configure
-          setIsAdminConfiguring(false);
-          setStation(''); // Reset station to let them pick a new one
+          setIsAdminAuthenticated(true);
+          setStation(''); 
           setIsLocked(false);
           setLoggedUser(null);
+          setCode(''); 
           return;
         }
 
@@ -268,6 +272,7 @@ export default function App() {
     const timer = setTimeout(() => {
       if (confirm('¿desea entrar al modo de configuración de terminal?')) {
         setIsAdminConfiguring(true);
+        setIsAdminAuthenticated(false);
         setLoggedUser(null);
       }
     }, 3000);
@@ -605,7 +610,7 @@ export default function App() {
           <div className="success-message">
             {success}
           </div>
-        ) : (!station || isAdminConfiguring) && (isAdminConfiguring || !isLocked) ? (
+        ) : (!station || isAdminConfiguring) && !isAdminAuthenticated ? (
           <div className="admin-login-step">
             {!isAdminConfiguring && !isLocked && (
               <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', color: '#92400e', fontSize: '0.9rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
@@ -613,6 +618,8 @@ export default function App() {
                 Esta terminal no está configurada aún.
               </div>
             )}
+            
+            <h3 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', textAlign: 'center' }}>Acceso de administrador</h3>
             
             <form onSubmit={handleLogin} className="form-group" style={{ gap: '1.25rem' }}>
               <div className="form-group">
@@ -636,13 +643,31 @@ export default function App() {
                 <label>Código Admin</label>
                 <div className="input-wrapper">
                   <input
+                    id="admin-code-input"
                     type={showCode ? "text" : "password"}
                     inputMode="numeric"
                     className="custom-input"
                     placeholder="PIN de administrador"
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
+                    style={{ paddingRight: '3rem' }}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowCode(!showCode)}
+                    style={{
+                      position: 'absolute',
+                      right: '1rem',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary)',
+                      display: 'flex'
+                    }}
+                    title={showCode ? "Ocultar PIN" : "Mostrar PIN"}
+                  >
+                    {showCode ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
                 </div>
               </div>
 
@@ -672,6 +697,8 @@ export default function App() {
                     onClick={() => {
                       setStation(st);
                       setIsLocked(true);
+                      setIsAdminAuthenticated(false);
+                      setIsAdminConfiguring(false);
                       setSelectedName('');
                       setError('');
                     }}
