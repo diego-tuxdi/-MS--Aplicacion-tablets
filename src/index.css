@@ -22,22 +22,28 @@
   user-select: none;
 }
 
+html, body {
+  height: 100%;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   background-color: var(--bg-color);
   background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
   background-size: 40px 40px;
   color: var(--text-primary);
-  min-height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
-  overflow-x: hidden;
-  overflow-y: auto;
 }
 
 #root {
   width: 100%;
-  min-height: 100vh;
+  height: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -45,12 +51,13 @@ body {
 
 .app-container {
   width: 100vw;
-  min-height: 100vh;
+  height: 100%;
   padding: 2rem 1rem;
   display: flex;
   justify-content: center;
   align-items: center;
   position: relative;
+  overflow-y: auto;
 }
 
 /* Light Corporate Card */
@@ -252,10 +259,12 @@ body {
 /* --- Dashboard --- */
 .dashboard-container {
   width: 100vw;
-  height: 100vh;
+  height: 100%;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   background: var(--bg-color);
+  overflow: hidden;
 }
 
 .dashboard-header {
